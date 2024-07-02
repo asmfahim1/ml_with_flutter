@@ -8,7 +8,7 @@ import 'package:tflite_flutter/tflite_flutter.dart';
 
 import 'Recognition.dart';
 
-class Recognizer {
+class RecognizerFaceDetect192 {
   late Interpreter interpreter;
   late InterpreterOptions _interpreterOptions;
   static const int WIDTH = 112;
@@ -17,7 +17,7 @@ class Recognizer {
   Map<String, Recognition> registered = Map();
   String get modelName => 'assets/mobile_face_net.tflite';
 
-  Recognizer({int? numThreads}) {
+  RecognizerFaceDetect192({int? numThreads}) {
     _interpreterOptions = InterpreterOptions();
 
     if (numThreads != null) {

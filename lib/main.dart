@@ -1,7 +1,8 @@
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:fresh_face_detect/camera_init_v2.dart';
+import 'package:fresh_face_detect/home_screen.dart';
 //import 'home_screen.dart';
-import 'package:fresh_face_detect/chat_gpt_ans.dart';
 
 late List<CameraDescription> cameras;
 Future<void> main() async {
@@ -17,8 +18,8 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-        home: CameraScreen(
-      cameras: cameras,
-    ));
+      home: CameraScreen(cameras: cameras,)
+        //home: CameraInitV2Screen(cameras: cameras,)
+    );
   }
 }

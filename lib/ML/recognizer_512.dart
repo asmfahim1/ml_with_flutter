@@ -8,16 +8,16 @@ import 'package:tflite_flutter/tflite_flutter.dart';
 
 import 'Recognition.dart';
 
-class Recognizer {
+class RecognizerFaceDetec512 {
   late Interpreter interpreter;
   late InterpreterOptions _interpreterOptions;
-  static const int WIDTH = 112;
-  static const int HEIGHT = 112;
+  static const int WIDTH = 160;
+  static const int HEIGHT = 160;
   final dbHelper = DatabaseHelper();
   Map<String, Recognition> registered = Map();
-  String get modelName => 'assets/mobile_face_net.tflite';
+  String get modelName => 'assets/facenet.tflite';
 
-  Recognizer({int? numThreads}) {
+  RecognizerFaceDetec512({int? numThreads}) {
     _interpreterOptions = InterpreterOptions();
 
     if (numThreads != null) {
@@ -90,7 +90,7 @@ class Recognizer {
         }
       }
     }
-    return reshapedArray.reshape([1, 112, 112, 3]);
+    return reshapedArray.reshape([1, 160, 160, 3]);
   }
 
   /*List<double> flattenImageData(img.Image image) {
@@ -119,7 +119,7 @@ class Recognizer {
     print(input.shape.toString());
 
     //TODO output array
-    List output = List.filled(1 * 192, 0).reshape([1, 192]);
+    List output = List.filled(1 * 512, 0).reshape([1, 512]);
 
     //TODO performs inference
     final runs = DateTime.now().millisecondsSinceEpoch;

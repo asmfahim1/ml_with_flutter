@@ -1,20 +1,21 @@
 import 'dart:async'; // Ensure you have the right ML Kit package
+
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:fresh_face_detect/ML/Recognizer.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 
-class CameraScreen extends StatefulWidget {
+class CameraInitV2Screen extends StatefulWidget {
   final List<CameraDescription> cameras;
 
-  CameraScreen({required this.cameras});
+  const CameraInitV2Screen({super.key, required this.cameras});
 
   @override
-  _CameraScreenState createState() => _CameraScreenState();
+  _CameraInitV2ScreenState createState() => _CameraInitV2ScreenState();
 }
 
-class _CameraScreenState extends State<CameraScreen> {
+class _CameraInitV2ScreenState extends State<CameraInitV2Screen> {
   late Timer _timer;
   late CameraController _controller;
   late Future<void> initializeControllerFuture;
@@ -23,7 +24,7 @@ class _CameraScreenState extends State<CameraScreen> {
   List<XFile> capturedImages = [];
   late String _cascadeFilePath;
   final FaceDetector _faceDetector =
-      FaceDetector(options: FaceDetectorOptions());
+  FaceDetector(options: FaceDetectorOptions());
   bool isFaceDetected = false;
 
   //final FaceDetector _faceDetector = FaceDetector();
@@ -37,11 +38,6 @@ class _CameraScreenState extends State<CameraScreen> {
   void initState() {
     super.initState();
 
-    var options = FaceDetectorOptions(
-      enableContours: true,
-      enableClassification: true,
-    );
-
     //faceDetector = FaceDetector(options: options);
     // TODO initialize face recognizer
     //recognizer = Recognizer();
@@ -54,23 +50,28 @@ class _CameraScreenState extends State<CameraScreen> {
       widget.cameras[currentCameraIndex],
       ResolutionPreset.high,
       imageFormatGroup:
-          ImageFormatGroup.nv21, // Use YUV format for raw image data
+      ImageFormatGroup.nv21, // Use YUV format for raw image data
     );
 
-    initializeControllerFuture = _controller.initialize().then((_) {
-      if (!mounted) return;
 
-      _startFrameExtraction();
-      setState(() {}); // Refresh the UI once the controller is initialized
+    _timer = Timer.periodic(const Duration(seconds: 3), (timer) {
+
+      initializeControllerFuture = _controller.initialize().then((_) {
+        if (!mounted) return;
+
+        _initializeCamera2();
+
+        setState(() {}); // Refresh the UI once the controller is initialized
+      });
     });
   }
 
   void _startFrameExtraction() {
     int i = 0;
     print('Calling ${i + 1} time');
-    _timer = Timer.periodic(const Duration(seconds: 3), (timer) {
-      _initializeCamera2();
-    });
+    // _timer = Timer.periodic(const Duration(seconds: 3), (timer) {
+    //   _initializeCamera2();
+    // });
   }
 
   Future<void> _initializeCamera2() async {
@@ -97,7 +98,7 @@ class _CameraScreenState extends State<CameraScreen> {
             //await _saveImage(image);
             //await _captureAndSaveFrame(image);
           } catch (err) {
-            print('error in stream: ${err}');
+            print('error in stream: $err');
           }
 
           _isStreaming = true;
@@ -155,7 +156,7 @@ class _CameraScreenState extends State<CameraScreen> {
       inputImageFormat: InputImageFormatValue.fromRawValue(image.format.raw) ??
           InputImageFormat.nv21,
       planeData: image.planes.map(
-        (Plane plane) {
+            (Plane plane) {
           return InputImagePlaneMetadata(
             bytesPerRow: plane.bytesPerRow,
             height: plane.height,

@@ -1,11 +1,10 @@
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:fresh_face_detect/ML/Recognition.dart';
+import 'package:fresh_face_detect/ML/recognition_192.dart';
+import 'package:fresh_face_detect/ML/recognition_v2.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:image/image.dart' as img;
-
-import 'ML/Recognizer.dart';
 
 late List<CameraDescription> cameras;
 
@@ -16,18 +15,19 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  dynamic controller;
+  CameraController? controller;
   bool isBusy = false;
   late Size size;
   late CameraDescription description = cameras[0];
-  CameraLensDirection camDirec = CameraLensDirection.front;
-  late List<Recognition> recognitions = [];
+  CameraLensDirection camDirec = CameraLensDirection.back;
+  late List<RecognitionV2> recognitions = [];
 
   //TODO declare face detector
   late FaceDetector faceDetector;
 
   //TODO declare face recognizer
-  late Recognizer recognizer;
+  late Recognition192 recognizer;
+  bool isDisposed = false;
 
   @override
   void initState() {
@@ -39,7 +39,7 @@ class _MyHomePageState extends State<MyHomePage> {
     );
     faceDetector = FaceDetector(options: options);
     //TODO initialize face recognizer
-    recognizer = Recognizer();
+    recognizer = Recognition192();
     //TODO initialize camera footage
     initializeCamera();
   }
@@ -52,20 +52,35 @@ class _MyHomePageState extends State<MyHomePage> {
       ResolutionPreset.high,
       imageFormatGroup: ImageFormatGroup.nv21,
     );
-    await controller.initialize().then((_) {
+    await controller!.initialize().then((_) {
       if (!mounted) {
         return;
       }
-      controller.startImageStream((image) => {
-            if (!isBusy)
-              {isBusy = true, frame = image, doFaceDetectionOnFrame(image)}
-          });
+      controller!.startImageStream((image) => {
+        if (!isBusy)
+          {isBusy = true, frame = image, doFaceDetectionOnFrame(image)}
+      });
+    });
+  }
+
+  // Stop the camera and release resources
+  Future<void> stopCamera() async {
+    await controller!.pausePreview();
+  }
+
+  // Restart the camera
+  Future<void> restartCamera() async {
+    await controller!.resumePreview();
+    setState(() {
+      isBusy = false;
+      recognitions.clear();
     });
   }
 
   //TODO close all resources
   @override
   void dispose() {
+    isDisposed = true;
     controller?.dispose();
     super.dispose();
   }
@@ -75,7 +90,6 @@ class _MyHomePageState extends State<MyHomePage> {
   CameraImage? frame;
   doFaceDetectionOnFrame(CameraImage image) async {
     //TODO convert frame into InputImage format
-
     print('============detection in =++===========');
 
     InputImage? inImg = await _convertCameraImageToInputImage(image);
@@ -88,10 +102,6 @@ class _MyHomePageState extends State<MyHomePage> {
     print('face detected = $faces');
     //TODO perform face recognition on detected faces
     performFaceRecognition(faces);
-    // setState(() {
-    //   _scanResults = faces;
-    //   isBusy = false;
-    // });
   }
 
   //conversion of image
@@ -105,11 +115,11 @@ class _MyHomePageState extends State<MyHomePage> {
     final InputImageData inputImageData = InputImageData(
       size: Size(image.width.toDouble(), image.height.toDouble()),
       imageRotation:
-          _rotationIntToImageRotation(controller.description.sensorOrientation),
+      _rotationIntToImageRotation(controller!.description.sensorOrientation),
       inputImageFormat: InputImageFormatValue.fromRawValue(image.format.raw) ??
           InputImageFormat.nv21,
       planeData: image.planes.map(
-        (Plane plane) {
+            (Plane plane) {
           return InputImagePlaneMetadata(
             bytesPerRow: plane.bytesPerRow,
             height: plane.height,
@@ -156,17 +166,22 @@ class _MyHomePageState extends State<MyHomePage> {
           height: faceRect.height.toInt());
 
       //TODO pass cropped face to face recognition model
-      Recognition recognition = recognizer.recognize(croppedFace, faceRect);
-      if (recognition.distance > 1) {
+      RecognitionV2 recognition = recognizer.recognize(croppedFace, faceRect);
+      // if (recognition.distance <= 1) {
+      //   // Stop the camera before showing the dialog
+      //   await stopCamera();
+      //   _showResponseDialog("Face Recognized", "Name: ${recognition.name}\nID: ${recognition.id}");
+      //   recognitions.add(recognition);
+      //   return; // Stop further processing
+      // } else {
+      //   recognition.name = "Unknown";
+      // }
+      if(recognition.distance > 1){
         recognition.name = "Unknown";
+        recognition.id = 0;
       }
-      recognitions.add(recognition);
 
-      //TODO show face registration dialogue
-      if (register) {
-        showFaceRegistrationDialogue(croppedFace, recognition);
-        register = false;
-      }
+      recognitions.add(recognition);
     }
 
     setState(() {
@@ -175,57 +190,28 @@ class _MyHomePageState extends State<MyHomePage> {
     });
   }
 
-  //TODO Face Registration Dialogue
-  TextEditingController textEditingController = TextEditingController();
-  showFaceRegistrationDialogue(img.Image croppedFace, Recognition recognition) {
+  void _showResponseDialog(String title, String message) {
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text("Face Registration", textAlign: TextAlign.center),
-        alignment: Alignment.center,
-        content: SizedBox(
-          height: 340,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              const SizedBox(
-                height: 20,
-              ),
-              Image.memory(
-                Uint8List.fromList(img.encodeBmp(croppedFace!)),
-                width: 200,
-                height: 200,
-              ),
-              SizedBox(
-                width: 200,
-                child: TextField(
-                    controller: textEditingController,
-                    decoration: const InputDecoration(
-                        fillColor: Colors.white,
-                        filled: true,
-                        hintText: "Enter Name")),
-              ),
-              const SizedBox(
-                height: 10,
-              ),
-              ElevatedButton(
-                  onPressed: () {
-                    recognizer.registerFaceInDB(
-                        textEditingController.text, recognition.embeddings);
-                    textEditingController.text = "";
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                      content: Text("Face Registered"),
-                    ));
-                  },
-                  style: ElevatedButton.styleFrom(
-                      primary: Colors.blue, minimumSize: const Size(200, 40)),
-                  child: const Text("Register"))
-            ],
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text(title),
+          content: Text(
+            message,
+            style: TextStyle(fontSize: 8),
           ),
-        ),
-        contentPadding: EdgeInsets.zero,
-      ),
+          actions: [
+            TextButton(
+              child: Text("OK"),
+              onPressed: () async {
+                Navigator.of(context).pop();
+                print('------- $recognitions ------');
+                await restartCamera();
+              },
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -269,65 +255,24 @@ class _MyHomePageState extends State<MyHomePage> {
     b = b.clamp(0, 255);
 
     return 0xff000000 |
-        ((b << 16) & 0xff0000) |
-        ((g << 8) & 0xff00) |
-        (r & 0xff);
-  }
-
-  //TODO convert CameraImage to InputImage
-  InputImage getInputImage() {
-    final WriteBuffer allBytes = WriteBuffer();
-    for (final Plane plane in frame!.planes) {
-      allBytes.putUint8List(plane.bytes);
-    }
-    final bytes = allBytes.done().buffer.asUint8List();
-    final Size imageSize =
-        Size(frame!.width.toDouble(), frame!.height.toDouble());
-    final camera = description;
-    final imageRotation =
-        InputImageRotationValue.fromRawValue(camera.sensorOrientation);
-    // if (imageRotation == null) return;
-
-    final inputImageFormat =
-        InputImageFormatValue.fromRawValue(frame!.format.raw);
-    // if (inputImageFormat == null) return null;
-
-    final planeData = frame!.planes.map(
-      (Plane plane) {
-        return InputImagePlaneMetadata(
-          bytesPerRow: plane.bytesPerRow,
-          height: plane.height,
-          width: plane.width,
-        );
-      },
-    ).toList();
-
-    final inputImageData = InputImageData(
-      size: imageSize,
-      imageRotation: imageRotation!,
-      inputImageFormat: inputImageFormat!,
-      planeData: planeData,
-    );
-
-    final inputImage =
-        InputImage.fromBytes(bytes: bytes, inputImageData: inputImageData);
-
-    return inputImage;
+    ((b << 16) & 0xff0000) |
+    ((g << 8) & 0xff00) |
+    (r & 0xff);
   }
 
   // TODO Show rectangles around detected faces
   Widget buildResult() {
     if (_scanResults == null ||
         controller == null ||
-        !controller.value.isInitialized) {
-      return const Center(child: Text('Camera is not initialized'));
+        !controller!.value.isInitialized) {
+      return const Center(child: Text('Please wait...'));
     }
     final Size imageSize = Size(
-      controller.value.previewSize!.height,
-      controller.value.previewSize!.width,
+      controller!.value.previewSize!.height,
+      controller!.value.previewSize!.width,
     );
     CustomPainter painter =
-        FaceDetectorPainter(imageSize, _scanResults, camDirec);
+    FaceDetectorPainter(imageSize, _scanResults, camDirec);
     return CustomPaint(
       painter: painter,
     );
@@ -342,7 +287,7 @@ class _MyHomePageState extends State<MyHomePage> {
       camDirec = CameraLensDirection.back;
       description = cameras[0];
     }
-    await controller.stopImageStream();
+    await controller!.stopImageStream();
     setState(() {
       controller;
     });
@@ -363,11 +308,11 @@ class _MyHomePageState extends State<MyHomePage> {
           width: size.width,
           height: size.height,
           child: Container(
-            child: (controller.value.isInitialized)
+            child: (controller!.value.isInitialized)
                 ? AspectRatio(
-                    aspectRatio: controller.value.aspectRatio,
-                    child: CameraPreview(controller),
-                  )
+              aspectRatio: controller!.value.aspectRatio,
+              child: CameraPreview(controller!),
+            )
                 : Container(),
           ),
         ),
@@ -384,59 +329,43 @@ class _MyHomePageState extends State<MyHomePage> {
       );
     }
 
-    //TODO View for displaying the bar to switch camera direction or for registering faces
-    stackChildren.add(Positioned(
-      top: size.height - 140,
-      left: 0,
-      width: size.width,
-      height: 80,
-      child: Card(
-        margin: const EdgeInsets.only(left: 20, right: 20),
-        color: Colors.blue,
-        child: Center(
-          child: Container(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    IconButton(
-                      icon: const Icon(
-                        Icons.cached,
-                        color: Colors.white,
-                      ),
-                      iconSize: 40,
-                      color: Colors.black,
-                      onPressed: () {
-                        _toggleCameraDirection();
-                      },
-                    ),
-                    /*Container(
-                      width: 30,
-                    ),
-                    IconButton(
-                      icon: const Icon(
-                        Icons.face_retouching_natural,
-                        color: Colors.white,
-                      ),
-                      iconSize: 40,
-                      color: Colors.black,
-                      onPressed: () {
-                        setState(() {
-                          register = true;
-                        });
-                      },
-                    )*/
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    ));
+    // //TODO View for displaying the bar to switch camera direction or for registering faces
+    // stackChildren.add(Positioned(
+    //   top: size.height - 140,
+    //   left: 0,
+    //   width: size.width,
+    //   height: 80,
+    //   child: Card(
+    //     margin: const EdgeInsets.only(left: 20, right: 20),
+    //     color: Colors.blue,
+    //     child: Center(
+    //       child: Container(
+    //         child: Column(
+    //           mainAxisAlignment: MainAxisAlignment.center,
+    //           crossAxisAlignment: CrossAxisAlignment.center,
+    //           children: [
+    //             Row(
+    //               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+    //               children: [
+    //                 IconButton(
+    //                   icon: const Icon(
+    //                     Icons.cached,
+    //                     color: Colors.white,
+    //                   ),
+    //                   iconSize: 40,
+    //                   color: Colors.black,
+    //                   onPressed: () {
+    //                     _toggleCameraDirection();
+    //                   },
+    //                 ),
+    //               ],
+    //             ),
+    //           ],
+    //         ),
+    //       ),
+    //     ),
+    //   ),
+    // ));
 
     return SafeArea(
       child: Scaffold(
@@ -456,7 +385,7 @@ class FaceDetectorPainter extends CustomPainter {
   FaceDetectorPainter(this.absoluteImageSize, this.faces, this.camDire2);
 
   final Size absoluteImageSize;
-  final List<Recognition> faces;
+  final List<RecognitionV2> faces;
   CameraLensDirection camDire2;
 
   @override
@@ -467,9 +396,9 @@ class FaceDetectorPainter extends CustomPainter {
     final Paint paint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.0
-      ..color = Colors.indigoAccent;
+      ..color =  Colors.greenAccent;
 
-    for (Recognition face in faces) {
+    for (RecognitionV2 face in faces) {
       canvas.drawRect(
         Rect.fromLTRB(
           camDire2 == CameraLensDirection.front
@@ -485,7 +414,7 @@ class FaceDetectorPainter extends CustomPainter {
       );
 
       TextSpan span = TextSpan(
-          style: const TextStyle(color: Colors.white, fontSize: 20),
+          style: const TextStyle(color: Colors.white, fontSize: 15),
           text: "${face.name}  ${face.distance.toStringAsFixed(2)}");
       TextPainter tp = TextPainter(
           text: span,
